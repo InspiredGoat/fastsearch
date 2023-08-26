@@ -35,30 +35,37 @@ type Source struct {
 	Description string
 	Author      string
 	Url         string
+	Id          string
 	Segments    []Segment
 }
 
-var sources []Source
-var usedTickets [][32]byte
+type Ticket struct {
+	Stage    string
+	Progress int
+	id       [32]byte
+}
 
-func getTicket() [32]byte {
+var sources []Source
+var usedTickets []Ticket
+
+func getTicket() *Ticket {
 	alphabet := []byte{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 't', 's', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
 
 	unique := false
 
-	// generate a unique ticket
-	var ticket [32]byte
+	// generate a unique ticket_id
+	var ticket_id [32]byte
 	for !unique {
 		unique = true
 
-		for i := range ticket {
-			ticket[i] = alphabet[rand.Intn(len(alphabet))]
+		for i := range ticket_id {
+			ticket_id[i] = alphabet[rand.Intn(len(alphabet))]
 		}
 
 		for i := range usedTickets {
 			sameTicket := true
-			for j := range ticket {
-				if usedTickets[i][j] != ticket[j] {
+			for j := range ticket_id {
+				if usedTickets[i].id[j] != ticket_id[j] {
 					sameTicket = false
 				}
 			}
@@ -70,16 +77,18 @@ func getTicket() [32]byte {
 		}
 	}
 
+	var ticket Ticket
+	ticket.id = ticket_id
 	usedTickets = append(usedTickets, ticket)
 
-	return ticket
+	return &usedTickets[len(usedTickets)-1]
 }
 
-func releaseTicket(ticket [32]byte) {
+func releaseTicket(ticket Ticket) {
 	for i := range usedTickets {
 		sameTicket := true
-		for j := range ticket {
-			if usedTickets[i][j] != ticket[j] {
+		for j := range ticket.id {
+			if usedTickets[i].id[j] != ticket.id[j] {
 				sameTicket = false
 			}
 		}
@@ -168,7 +177,7 @@ func parseFile(filename string, group string) Source {
 			seconds, _ = strconv.Atoi(string(halves[1][6]) + string(halves[1][7]))
 			currentSegment.End = uint32(seconds + minutes*60 + hours*60*60)
 		} else if line_num%4 == 2 {
-			currentSegment.Text = strings.ToLower(line)
+			currentSegment.Text = line
 
 			// append segment
 			source.Segments = append(source.Segments, currentSegment)
@@ -196,7 +205,9 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 	parse := func() {
 		ticket := getTicket()
 
-		path := "downloaded/" + string(ticket[:])
+		path := "downloaded/" + string(ticket.id[:])
+		ticket.Stage = "Downloading..."
+		ticket.Progress = 0
 		os.MkdirAll(path, 0o777)
 		fmt.Println("Downloading " + url)
 		downloadYoutube(path, url)
@@ -209,6 +220,8 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		ticket.Stage = "Transcribing..."
+		ticket.Progress = 50
 		for _, f := range files {
 			fmt.Println("transcribing " + f.Name())
 			transcribe(path + "/" + f.Name())
@@ -222,6 +235,8 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		ticket.Stage = "Transcribing..."
+		ticket.Progress = 90
 		fmt.Println("Parsing")
 		for _, f := range files {
 			// TODO: add actual group string
@@ -235,6 +250,7 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 				s.Group = url
 				id := strings.Split(f.Name(), "{{")[1]
 				id = strings.Split(id, "}}")[0]
+				s.Id = id
 				s.Url = "https://www.youtube.com/watch?v=" + id
 				fmt.Println(s.Url)
 				sources = append(sources, s)
@@ -242,11 +258,13 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 		}
 		fmt.Println("Done parsing")
 
+		ticket.Stage = "Saving..."
+		ticket.Progress = 90
 		if len(sources) > 0 {
 			fmt.Println(sources[len(sources)-1])
 		}
 
-		releaseTicket(ticket)
+		releaseTicket(*ticket)
 		fmt.Println("Saving")
 		saveSources()
 	}
@@ -258,33 +276,39 @@ func reqQuery(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 	q := strings.ToLower(req.Form.Get("search"))
 
+	if q == "" {
+		return
+	}
+
 	var top_results []Result
 
 	for i := range sources {
 		s := &sources[i]
 
-		// first exact matches
-		for j := range s.Segments {
-			var res Result
-			res.text = ""
-			res.start = s.Segments[j].Start
-			res.end = s.Segments[j].End
-			res.source = s
+		if req.Form.Get(s.Name) == "enabled" {
+			// first exact matches
+			for j := range s.Segments {
+				var res Result
+				res.text = ""
+				res.start = s.Segments[j].Start
+				res.end = s.Segments[j].End
+				res.source = s
 
-			// if j > 0 {
-			// 	res.text += s.Segments[j-1].Text
-			// 	res.start = s.Segments[j].Start
-			// }
+				// if j > 0 {
+				// 	res.text += s.Segments[j-1].Text
+				// 	res.start = s.Segments[j].Start
+				// }
 
-			res.text += s.Segments[j].Text
+				res.text += s.Segments[j].Text
 
-			// if j < len(s.Segments)-1 {
-			// 	res.text += s.Segments[j+1].Text
-			// 	res.end = s.Segments[j].End
-			// }
+				// if j < len(s.Segments)-1 {
+				// 	res.text += s.Segments[j+1].Text
+				// 	res.end = s.Segments[j].End
+				// }
 
-			if strings.Contains(res.text, q) {
-				top_results = append(top_results, res)
+				if strings.Contains(strings.ToLower(res.text), q) {
+					top_results = append(top_results, res)
+				}
 			}
 		}
 	}
@@ -296,12 +320,37 @@ func reqQuery(w http.ResponseWriter, req *http.Request) {
 		}
 
 		fmt.Fprintln(w, "<li>")
-		fmt.Fprintln(w, r.text)
-		fmt.Fprintln(w, "</li>")
-		fmt.Fprintln(w, "<iframe src=\"")
-		fmt.Fprintln(w, r.source.Url)
+		i := strings.Index(r.text, q)
+
+		fmt.Fprint(w, "“")
+		text := strings.TrimSpace(r.text)
+		if i != -1 {
+			fmt.Fprint(w, text[:i-1])
+			fmt.Fprint(w, "<b>")
+			fmt.Fprint(w, text[i-1:i-1+len(q)])
+			fmt.Fprint(w, "</b>")
+			fmt.Fprint(w, text[i-1+len(q):])
+			fmt.Fprint(w)
+		} else {
+			fmt.Fprint(w, text)
+		}
+		fmt.Fprintln(w, "”")
+
+		fmt.Fprintln(w, "<a href=\"")
+		fmt.Fprintln(w, r.source.Url+"&t="+strconv.Itoa(int(r.start)))
 		fmt.Fprintln(w, "\">")
+		fmt.Fprintln(w, "⮫")
+		fmt.Fprintln(w, "</a>")
+		fmt.Fprintln(w, "</li>")
+
+		fmt.Fprintln(w, "<a href=\"#\" onclick=\"toggleChildVisible(event)\">🠊")
+		fmt.Fprintln(w, "<div class=\"hidden\">")
+		fmt.Fprintln(w, "<iframe class=\"ytembed\" src=\"")
+		fmt.Fprintln(w, "https://www.youtube.com/embed/"+r.source.Id+"?start="+strconv.Itoa(int(r.start)))
+		fmt.Fprintln(w, "\" title=\"YouTube video player\" frameborder=\"0\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" allowfullscreen>")
 		fmt.Fprintln(w, "</iframe>")
+		fmt.Fprintln(w, "</div>")
+		fmt.Fprintln(w, "</a>")
 	}
 	fmt.Fprintln(w, "</ul>")
 }
@@ -370,12 +419,20 @@ func loadSources() {
 	}
 }
 
+func reqGetSources(w http.ResponseWriter, req *http.Request) {
+	for _, s := range sources {
+		fmt.Fprintln(w, "<input id=\""+s.Name+"\" name=\""+s.Name+"\" class=\"source-checkbox\" value=\"enabled\" type=\"checkbox\" onclick=\"htmx.trigger('#search', 'search')\" checked>")
+		fmt.Fprintln(w, "<label for=\""+s.Name+"\">"+s.Name+"</label><br><br>")
+	}
+}
+
 func main() {
 	loadSources()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/query", reqQuery)
 	mux.HandleFunc("/addyoutube", reqAddYoutube)
+	mux.HandleFunc("/getsources", reqGetSources)
 	mux.HandleFunc("/trolling", func(w http.ResponseWriter, req *http.Request) {
 		fmt.Println("trolled!")
 		fmt.Fprintln(w, "Yo wassup homie")

@@ -1,28 +1,48 @@
 html, body {
-    background-color: green;
+    font-size: 10pt;
+    font-family: Helvetica;
 }
 
 main {
-    width: 800px;
+    width: min(800px, 100%);
     margin: auto;
-    background-color: orange;
 }
 
 .vertical-space {
     display: block;
-    height: 50vh;
-    background-color: purple;
-    transition height .5s;
+    height: calc(50vh - 3px - 10pt);
+}
+.no-height {
+    height: 0px;
 }
 
 #spacer {
     width: 100%;
     display: block;
+    transition: height .2s;
+}
+
+label {
+    user-select: none;
+}
+
+i {
+    margin-left: 5px;
+    transition: all .2s;
+}
+
+i:active {
+    font-size: 40pt;
+}
+
+.spun {
+    transform: rotate(90deg)
 }
 
 #search {
-    margin: auto;
-    display: block;
+    float: left;
+    display: inline-block;
+    font-size: 16pt;
     width: 90%;
 }
 
@@ -30,4 +50,22 @@ main {
     width: 800px;
 }
 
+.ytembed {
+    width: 560px;
+    height: 315px;
+    background-color: black;
+}
 
+#settings {
+    border: solid black 1px;
+    padding: 5px;
+}
+
+div {
+    transition: all .2s;
+}
+
+.hidden {
+    transform: scale(0px);
+    display: none;
+}

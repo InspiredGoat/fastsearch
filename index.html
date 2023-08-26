@@ -6,6 +6,8 @@
     <meta http-equiv="Access-Control-Allow-Origin" content="*">
     <script src="static/htmx.min.js"></script>
     <link rel="stylesheet" type="text/css" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
     <script>
         function start() {
             var elem = document.getElementById("search")
@@ -15,28 +17,96 @@
                 const val = elem.value.trim();
                 console.log("this ran")
                 if (val == "") {
+                    document.getElementById("spacer").classList.remove('no-height');
                     document.getElementById("spacer").classList.add('vertical-space');
                 } else {
                     document.getElementById("spacer").classList.remove('vertical-space');
+                    document.getElementById("spacer").classList.add('no-height');
                 }
             })
         }
+
+        function toggleChildVisible(ev) {
+            var elem = ev.target;
+
+//            var parent = elem.parentElement;
+//            for (var i = 0; i < parent.children.length; i++) {
+//                if (parent.children[i] == elem) {
+//                    elem = parent.children[i + 1];
+//                    console.log(elem)
+//                    break
+//                }
+//            }
+
+            console.log(elem)
+            elem = elem.firstElementChild;
+            console.log(elem)
+
+            if (elem.nodeName == "DIV") {
+                if (elem.classList.contains("hidden")) {
+                    elem.classList.remove("hidden");
+                } else {
+                    elem.classList.add("hidden");
+                }
+            }
+        }
+
+        function toggleIdVisible(id) {
+            var elem = document.getElementById(id);
+
+            if (elem.classList.contains("hidden")) {
+                elem.classList.remove("hidden");
+            } else {
+                elem.classList.add("hidden");
+            }
+        }
+
+        function toggleSelfClass(event, className) {
+            var elem = event.target;
+
+            if (elem.classList.contains(className)) {
+                elem.classList.remove(className);
+            } else {
+                elem.classList.add(className);
+            }
+        }
+
     </script>
 </head>
 <body onload="start();">
 
+<main>
 
     <div id="spacer" class="vertical-space"></div>
+
     <input id="search" type="search" 
-       name="search" placeholder="Start typing to start search"
+       name="search" placeholder="Type to start searching"
        hx-get="http://localhost:8888/query"
        hx-trigger="keyup changed delay:5ms, search" 
-       hx-target="#results">
+       hx-target="#results"
+       hx-include="[class='source-checkbox']">
 
-    <div id="sources"></div>
+    <span onclick="toggleIdVisible('settings');toggleSelfClass(event, 'spun')"><i class="fa fa-cog" aria-hidden="true" style="float: left; font-size:30px;"></i></span>
+
+    <br>
+    <br>
+    <br>
+
+    <div id="settings" class="hidden">
+        <p><b>Settings:</b></p>
+        <input id="fuzzysearch" name="fuzzy" class="source-checkbox" value="enabled" type="checkbox" onclick="htmx.trigger('#search', 'search')" checked>
+        <label for="fuzzysearch">Do fuzzy searching</label>
+        <br>
+
+        <p><b>Sources:</b></p>
+        <div id="sources" hx-trigger="load" hx-get="http://localhost:8888/getsources"></div>
+        <div id="addsource">Manage sources</div>
+        <div id="tickets" hx-trigger="every 1s" hx-get="http://localhost:8888/gettickets"></div>
+    </div>
+
     <div id="results"></div>
 
-    </main>
+</main>
 
 </body>
 </html>
