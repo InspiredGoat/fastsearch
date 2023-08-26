@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"os"
 	"os/exec"
 )
 
@@ -14,10 +16,13 @@ type Section struct {
 }
 
 type Source struct {
-	name        string
+	name string
+	// so if they come from a single playlist or channel queue, that sort of thing
+	group       string
 	description string
+	author      string
 	url         string
-	subtitles   string
+	subtitles   []Section
 }
 
 var sources []Source
@@ -74,35 +79,72 @@ func releaseTicket(ticket [32]byte) {
 	}
 }
 
-func downloadYoutube(ticket string, url string) {
+// returns filename
+func downloadYoutube(path string, url string) {
 	// name should just be url
 	// IF THERE'S ANY PROBLEM IT'S PROBABLY THE -F 250 part
-	exec.Command("yt-dlp", "-o", "downloaded/%(title)s|https:~~youtube.com~watch?v=%(id)s", "-F", "250", "-x", "--audio-format", "wav", url)
+	filename := path + "/%(id)s"
+	fmt.Println("yt-dlp", "-o", "'"+filename+"'", "-x", "--audio-format", "wav", url)
+	cmd := exec.Command("yt-dlp", "-o", filename, "-f", "250", "-x", "--audio-format", "wav", url)
 
-	fmt.Println("Finished downloading")
-	// move to url name or something
-
-	// parse titles and stuff
+	cmd.Wait()
+	out, err := cmd.Output()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	fmt.Printf("%s\n", out)
 }
 
 func downloadPodcast() {
-	// similar idea
+	// similar idea but parse RSS feed first and stuff
 }
 
-func transcribe() {
+func transcribe(filename string) {
+	fmt.Println("Started transcibing: " + filename)
+	cmd := exec.Command("shisper", "transcribe", filename)
+	cmd.Wait()
+	out, err := cmd.Output()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	fmt.Printf("%s\n", out)
+	fmt.Println("Done transcibing")
 }
 
-func parseFile() {
+func parseFile(filename string, group string) Source {
+	buf, _ := ioutil.ReadFile(filename)
+
+	// first line is error
 }
 
 func reqAddYoutube(res http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 	url := req.Form.Get("url")
 
-	fmt.Println("Downloading " + url)
-	ticket := getTicket()
-	downloadYoutube(ticket, url)
+	url = url[1:]
+	url = url[:len(url)-1]
 
+	ticket := getTicket()
+
+	path := "downloaded/" + string(ticket[:])
+	os.MkdirAll(path, 0o777)
+	fmt.Println("Downloading " + url)
+	downloadYoutube(path, url)
+	fmt.Println("done downloading")
+
+	files, err := ioutil.ReadDir(path)
+
+	if err != nil {
+		fmt.Println("Couldnt read path: " + path)
+		return
+	}
+
+	for _, f := range files {
+		fmt.Println("transcribing " + f.Name())
+		transcribe(path + "/" + f.Name())
+	}
+
+	releaseTicket(ticket)
 	res.Write([]byte("Yay"))
 }
 
