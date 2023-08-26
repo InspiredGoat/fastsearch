@@ -1,15 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 )
 
-type Section struct {
+type Segment struct {
 	start uint32
 	end   uint32
 	text  string
@@ -22,7 +25,7 @@ type Source struct {
 	description string
 	author      string
 	url         string
-	subtitles   []Section
+	segments    []Segment
 }
 
 var sources []Source
@@ -112,9 +115,58 @@ func transcribe(filename string) {
 }
 
 func parseFile(filename string, group string) Source {
-	buf, _ := ioutil.ReadFile(filename)
+	file, err := os.Open(filename)
 
-	// first line is error
+	if err != nil {
+		fmt.Println("Couldn't read file SAD!")
+		var source Source
+		return source
+	}
+
+	scanner := bufio.NewScanner(file)
+
+	var source Source
+	var currentSegment Segment
+
+	line_num := 0
+	for scanner.Scan() {
+		// first line is the number
+		// second line is the timecodes
+		// third line is the transcript
+		// fourth line is etc...
+
+		// fmt.Println(line_num, scanner.Text())
+		line := scanner.Text()
+
+		if line_num%4 == 0 {
+			// skip
+		} else if line_num%4 == 1 {
+			halves := strings.Split(line, " --> ")
+
+			// first time code
+			hours, _ := strconv.Atoi(string(halves[0][0]) + string(halves[0][1]))
+			minutes, _ := strconv.Atoi(string(halves[0][3]) + string(halves[0][4]))
+			seconds, _ := strconv.Atoi(string(halves[0][6]) + string(halves[0][7]))
+
+			currentSegment.start = uint32(seconds + minutes*60 + hours*60*60)
+
+			hours, _ = strconv.Atoi(string(halves[1][0]) + string(halves[1][1]))
+			minutes, _ = strconv.Atoi(string(halves[1][3]) + string(halves[1][4]))
+			seconds, _ = strconv.Atoi(string(halves[1][6]) + string(halves[1][7]))
+			currentSegment.end = uint32(seconds + minutes*60 + hours*60*60)
+		} else if line_num%4 == 2 {
+			currentSegment.text = line
+
+			// append segment
+			source.segments = append(source.segments, currentSegment)
+		} else if line_num%4 == 3 {
+			// skip
+		}
+
+		line_num++
+	}
+
+	return source
 }
 
 func reqAddYoutube(res http.ResponseWriter, req *http.Request) {
@@ -124,28 +176,55 @@ func reqAddYoutube(res http.ResponseWriter, req *http.Request) {
 	url = url[1:]
 	url = url[:len(url)-1]
 
-	ticket := getTicket()
-
-	path := "downloaded/" + string(ticket[:])
-	os.MkdirAll(path, 0o777)
-	fmt.Println("Downloading " + url)
-	downloadYoutube(path, url)
-	fmt.Println("done downloading")
-
-	files, err := ioutil.ReadDir(path)
-
-	if err != nil {
-		fmt.Println("Couldnt read path: " + path)
-		return
-	}
-
-	for _, f := range files {
-		fmt.Println("transcribing " + f.Name())
-		transcribe(path + "/" + f.Name())
-	}
-
-	releaseTicket(ticket)
+	// TODO: maybe validate input first
 	res.Write([]byte("Yay"))
+
+	parse := func() {
+		ticket := getTicket()
+
+		path := "downloaded/" + string(ticket[:])
+		os.MkdirAll(path, 0o777)
+		fmt.Println("Downloading " + url)
+		downloadYoutube(path, url)
+		fmt.Println("done downloading")
+
+		files, err := ioutil.ReadDir(path)
+
+		if err != nil {
+			fmt.Println("Couldnt read path: " + path)
+			return
+		}
+
+		for _, f := range files {
+			fmt.Println("transcribing " + f.Name())
+			transcribe(path + "/" + f.Name())
+		}
+
+		files, err = ioutil.ReadDir(path)
+
+		if err != nil {
+			fmt.Println("Couldnt read path: " + path)
+			return
+		}
+
+		for _, f := range files {
+			// TODO: add actual group string
+			fname := f.Name()
+			extension := fname[len(fname)-4:]
+
+			if extension == ".srt" {
+				sources = append(sources, parseFile(path+"/"+f.Name(), ""))
+			}
+		}
+
+		if len(sources) > 0 {
+			fmt.Println(sources[len(sources)-1])
+		}
+
+		releaseTicket(ticket)
+	}
+
+	go parse()
 }
 
 func reqQuery(res http.ResponseWriter, req *http.Request) {
