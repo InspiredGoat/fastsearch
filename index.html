@@ -3,9 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <title>Fastfind</title>
-    <script src="/static/htmx.min.js"></script>
+    <meta http-equiv="Access-Control-Allow-Origin" content="*">
+    <script src="static/htmx.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <script>
+        function start() {
+            var elem = document.getElementById("search")
+            console.log('this ran')
+            
+            elem.addEventListener('input', evt => {
+                const val = elem.value.trim();
+                console.log("this ran")
+                if (val == "") {
+                    document.getElementById("spacer").classList.add('vertical-space');
+                } else {
+                    document.getElementById("spacer").classList.remove('vertical-space');
+                }
+            })
+        }
+    </script>
 </head>
-<body>
-    <div></div>
+<body onload="start();">
+
+
+    <div id="spacer" class="vertical-space"></div>
+    <input id="search" type="search" 
+       name="search" placeholder="Start typing to start search"
+       hx-get="http://localhost:8888/query"
+       hx-trigger="keyup changed delay:5ms, search" 
+       hx-target="#results">
+
+    <div id="sources"></div>
+    <div id="results"></div>
+
+    </main>
+
 </body>
 </html>

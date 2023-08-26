@@ -1,0 +1,33 @@
+html, body {
+    background-color: green;
+}
+
+main {
+    width: 800px;
+    margin: auto;
+    background-color: orange;
+}
+
+.vertical-space {
+    display: block;
+    height: 50vh;
+    background-color: purple;
+    transition height .5s;
+}
+
+#spacer {
+    width: 100%;
+    display: block;
+}
+
+#search {
+    margin: auto;
+    display: block;
+    width: 90%;
+}
+
+#results {
+    width: 800px;
+}
+
+
