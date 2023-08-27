@@ -26,6 +26,7 @@ type Result struct {
 	start  uint32
 	end    uint32
 	source *Source
+	dist int
 }
 
 type Source struct {
@@ -321,17 +322,37 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 	go parse()
 }
 
-func levenshtein(a string, b string, n int, m int) int {
-	if n == 0 {
-		return m
-	} else if m == 0
-		return n
-	} else if a[n - 1] == b[m - 1] {
-	} else {
-		min
-		lev(a, b, n - 1, m - 1), lev()
+func lev(a string, b string) int {
+	n := len(a)
+	m := len(b)
+	dp := make([]int, (n + 1)*(m + 1))
+
+	for i:= 0; i < n; i++ {
+		dp[i*(m + 1)] = i
+	}
+	for j:= 0; j < m; j++ {
+		dp[j] = j
+	}
+	for i:= 1; i < n; i++ {
+		for j:= 1; j < m; j++ {
+			if a[i - 1] == b[j - 1] {
+				dp[i*(m+1) + j] = dp[(i - 1) * (m + 1) + (j - 1)]
+			} else {
+				x := dp[(i) * (m + 1) + (j - 1)]
+				y := dp[(i - 1) * (m + 1) + (j)]
+				z := dp[(i - 1) * (m + 1) + (j - 1)]
+				min := z
+				if x < z && x < y {
+					min = x
+				} else if y < z && y < x {
+					min = y
+				}
+				dp[i*(m+1) + j] = min + 1
+			}
+		}
 	}
 
+	return dp[len(dp) - 1]
 }
 
 func reqQuery(w http.ResponseWriter, req *http.Request) {
@@ -343,6 +364,7 @@ func reqQuery(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var top_results []Result
+	var results []Result
 
 	for i := range sources {
 		s := &sources[i]
@@ -368,12 +390,26 @@ func reqQuery(w http.ResponseWriter, req *http.Request) {
 				// 	res.end = s.Segments[j].End
 				// }
 
+				// res.dist = lev(strings.ToLower(res.text), q)
+				results = append(results, res)
+
 				if strings.Contains(strings.ToLower(res.text), q) {
 					top_results = append(top_results, res)
 				}
 			}
 		}
 	}
+
+	// sort.Slice(results, func(i int, j int) bool {
+	// 	return results[i].dist < results[j].dist
+	// })
+
+	// for i, r := range results {
+	// 	if i > 5 {
+	// 		break
+	// 	}
+	// 	fmt.Println(r.dist, r.text)
+	// }
 
 	fmt.Fprintln(w, "<p> Found", len(top_results), "matches</p>")
 	fmt.Fprintln(w, "<ul>")

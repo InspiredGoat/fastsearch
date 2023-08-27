@@ -1,6 +1,7 @@
 html, body {
     font-size: 11pt;
     font-family: Helvetica;
+    height: 100%;
 }
 
 main {
@@ -10,7 +11,7 @@ main {
 
 .vertical-space {
     display: block;
-    height: calc(50vh - 3px - 10pt);
+    height: calc(50vh - 3px - 30pt);
 }
 .no-height {
     height: 0px;
@@ -35,6 +36,15 @@ input[type=text] {
     width: 100%;
     display: block;
     transition: height .2s;
+}
+
+button {
+    background-color: white;
+    border: solid black 1px;
+}
+button:hover {
+    background-color: white;
+    border: solid black 1px;
 }
 
 label {
@@ -64,6 +74,7 @@ li {
 }
 
 #search {
+    margin-left: 20px;
     float: left;
     display: inline-block;
     font-size: 16pt;
@@ -71,6 +82,7 @@ li {
 }
 
 #results {
+    background-color: white;
     width: 800px;
 }
 
@@ -81,6 +93,7 @@ li {
 }
 
 #settings {
+    background-color: white;
     border: solid black 1px;
     padding: 5px;
 }
