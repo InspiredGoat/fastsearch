@@ -40,6 +40,7 @@ type Source struct {
 }
 
 type Ticket struct {
+	name     string
 	Stage    string
 	Progress int
 	id       [32]byte
@@ -47,6 +48,38 @@ type Ticket struct {
 
 var sources []Source
 var usedTickets []Ticket
+
+func makeId() string {
+	alphabet := []byte{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 't', 's', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
+
+	unique := false
+
+	// generate a unique ticket_id
+	var ticket_id [64]byte
+	for !unique {
+		unique = true
+
+		for i := range ticket_id {
+			ticket_id[i] = alphabet[rand.Intn(len(alphabet))]
+		}
+
+		for i := range usedTickets {
+			sameTicket := true
+			for j := range ticket_id {
+				if usedTickets[i].id[j] != ticket_id[j] {
+					sameTicket = false
+				}
+			}
+
+			if sameTicket {
+				unique = false
+				break
+			}
+		}
+	}
+
+	return string(ticket_id[:])
+}
 
 func getTicket() *Ticket {
 	alphabet := []byte{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 't', 's', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
@@ -102,6 +135,21 @@ func releaseTicket(ticket Ticket) {
 }
 
 // returns filename
+func getVideoOrPlaylistName(url string) string {
+	cmd := exec.Command("yt-dlp", "--print", "playlist", url)
+	cmd.Wait()
+	out, _ := cmd.Output()
+
+	if !strings.Contains(string(out[:]), "NA") {
+		return strings.Split(string(out[:]), "\n")[0]
+	} else {
+		cmd := exec.Command("yt-dlp", "--print", "title", url)
+		cmd.Wait()
+
+		out, _ = cmd.Output()
+		return strings.Split(string(out[:]), "\n")[0]
+	}
+}
 func downloadYoutube(path string, url string) {
 	// name should just be url
 	// IF THERE'S ANY PROBLEM IT'S PROBABLY THE -F 250 part
@@ -196,22 +244,23 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 	url := req.Form.Get("url")
 
-	url = url[1:]
-	url = url[:len(url)-1]
-
 	// TODO: maybe validate input first
 	w.Write([]byte("Yay"))
 
 	parse := func() {
 		ticket := getTicket()
 
+		ticket.Stage = "Finding name..."
+		ticket.name = getVideoOrPlaylistName(url)
+		ticket.Progress = 10
+
 		path := "downloaded/" + string(ticket.id[:])
 		ticket.Stage = "Downloading..."
-		ticket.Progress = 0
 		os.MkdirAll(path, 0o777)
 		fmt.Println("Downloading " + url)
 		downloadYoutube(path, url)
 		fmt.Println("done downloading")
+		ticket.Progress = 30
 
 		files, err := ioutil.ReadDir(path)
 
@@ -221,11 +270,12 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 		}
 
 		ticket.Stage = "Transcribing..."
-		ticket.Progress = 50
 		for _, f := range files {
 			fmt.Println("transcribing " + f.Name())
 			transcribe(path + "/" + f.Name())
+			ticket.Progress += (80 - 30) / len(files)
 		}
+		ticket.Progress = 80
 		fmt.Println("Done transcibing")
 
 		files, err = ioutil.ReadDir(path)
@@ -246,7 +296,7 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 			if extension == ".srt" {
 				s := parseFile(path+"/"+f.Name(), "")
 				// video title ideally
-				s.Name = f.Name()
+				s.Name = strings.Split(f.Name(), "{{")[0]
 				s.Group = url
 				id := strings.Split(f.Name(), "{{")[1]
 				id = strings.Split(id, "}}")[0]
@@ -261,7 +311,6 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 		ticket.Stage = "Saving..."
 		ticket.Progress = 90
 		if len(sources) > 0 {
-			fmt.Println(sources[len(sources)-1])
 		}
 
 		releaseTicket(*ticket)
@@ -270,6 +319,19 @@ func reqAddYoutube(w http.ResponseWriter, req *http.Request) {
 	}
 
 	go parse()
+}
+
+func levenshtein(a string, b string, n int, m int) int {
+	if n == 0 {
+		return m
+	} else if m == 0
+		return n
+	} else if a[n - 1] == b[m - 1] {
+	} else {
+		min
+		lev(a, b, n - 1, m - 1), lev()
+	}
+
 }
 
 func reqQuery(w http.ResponseWriter, req *http.Request) {
@@ -313,14 +375,23 @@ func reqQuery(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	fmt.Fprintln(w, "<p> Found", len(top_results), "matches</p>")
 	fmt.Fprintln(w, "<ul>")
+
 	for i, r := range top_results {
 		if i > 10 {
 			break
 		}
 
 		fmt.Fprintln(w, "<li>")
-		i := strings.Index(r.text, q)
+		i := strings.Index(strings.ToLower(r.text), q)
+		minutes := int(r.start / 60)
+		seconds := int(int(r.start) - minutes*60)
+		fmt.Fprintln(w, "<p><u>", r.source.Name+"</u>", "at", strconv.Itoa(minutes)+"m"+strconv.Itoa(seconds)+"s", "</p>")
+
+		id := makeId()
+		id2 := makeId()
+		fmt.Fprintln(w, "<a href=\"#\" onclick=\"toggleIdVisible('"+id+"');toggleIdClass('"+id2+"', 'spun')\">")
 
 		fmt.Fprint(w, "“")
 		text := strings.TrimSpace(r.text)
@@ -336,21 +407,21 @@ func reqQuery(w http.ResponseWriter, req *http.Request) {
 		}
 		fmt.Fprintln(w, "”")
 
+		fmt.Fprintln(w, "<i id=\""+id2+"\"class=\"fa fa-caret-right\" aria-hidden=\"true\"></i></a>")
+
 		fmt.Fprintln(w, "<a href=\"")
 		fmt.Fprintln(w, r.source.Url+"&t="+strconv.Itoa(int(r.start)))
 		fmt.Fprintln(w, "\">")
-		fmt.Fprintln(w, "⮫")
+		fmt.Fprintln(w, "<i class=\"fa fa-external-link\" aria-hidden=\"true\"></i>")
 		fmt.Fprintln(w, "</a>")
 		fmt.Fprintln(w, "</li>")
 
-		fmt.Fprintln(w, "<a href=\"#\" onclick=\"toggleChildVisible(event)\">🠊")
-		fmt.Fprintln(w, "<div class=\"hidden\">")
+		fmt.Fprintln(w, "<div class=\"hidden\" id=\""+id+"\">")
 		fmt.Fprintln(w, "<iframe class=\"ytembed\" src=\"")
 		fmt.Fprintln(w, "https://www.youtube.com/embed/"+r.source.Id+"?start="+strconv.Itoa(int(r.start)))
 		fmt.Fprintln(w, "\" title=\"YouTube video player\" frameborder=\"0\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" allowfullscreen>")
 		fmt.Fprintln(w, "</iframe>")
 		fmt.Fprintln(w, "</div>")
-		fmt.Fprintln(w, "</a>")
 	}
 	fmt.Fprintln(w, "</ul>")
 }
@@ -425,6 +496,65 @@ func reqGetSources(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintln(w, "<label for=\""+s.Name+"\">"+s.Name+"</label><br><br>")
 	}
 }
+func reqGetRawSources(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprintln(w, "<ul>")
+	for _, s := range sources {
+		fmt.Fprintln(w, "<li>"+s.Name+"</li>")
+	}
+	fmt.Fprintln(w, "</ul>")
+}
+func reqGetTickets(w http.ResponseWriter, req *http.Request) {
+	if len(usedTickets) > 0 {
+		fmt.Fprintln(w, "<h2>Downloading videos</h2>")
+		fmt.Fprintln(w, "<ul>")
+		for _, t := range usedTickets {
+			fmt.Fprintln(w, "<li><div class=\"progress\">"+t.name, t.Stage)
+			fmt.Fprintln(w, "<div class=\"progress-inside\" width=\"", t.Progress, "%\"")
+			fmt.Fprintln(w, "background-color=\"")
+			if t.Progress < 30 {
+				fmt.Fprintln(w, "red")
+			} else if t.Progress < 50 {
+				fmt.Fprintln(w, "orange")
+			} else if t.Progress < 70 {
+				fmt.Fprintln(w, "light-green")
+			} else {
+				fmt.Fprintln(w, "green")
+			}
+			fmt.Fprintln(w, "\"></div></div></li>")
+		}
+		fmt.Fprintln(w, "</ul>")
+	}
+}
+
+func reqSourceModal(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprintln(w, "<div id=\"modal\" _=\"on closeModal add .closing then wait for animationend then remove me\">")
+
+	fmt.Fprintln(w, "<div class=\"modal-underlay\" hx-trigger=\"click\" hx-target=\"#modal\" hx-swap=\"outerHTML\" hx-get=\"http://localhost:8888/nothing\"></div>")
+	fmt.Fprintln(w, "<div class=\"modal-content\">")
+	fmt.Fprintln(w, "<h2>Available Videos</h2>")
+	fmt.Fprintln(w, "This is the modal content.")
+	fmt.Fprintln(w, "<div id=\"sourceview\" hx-trigger=\"load, every 1s\" hx-get=\"http://localhost:8888/getrawsources\"></div>")
+
+	fmt.Fprintln(w, "<div id=\"videoqueue\" hx-trigger=\"every 1s\" hx-get=\"http://localhost:8888/gettickets\"></div>")
+
+	fmt.Fprintln(w, "<h2>Add video</h2>")
+	fmt.Fprintln(w, "<form hx-get=\"http://localhost:8888/addyoutube\" hx-swap=none>")
+	fmt.Fprintln(w, "<input placeholder=\"Paste youtube video or playlist link here\" id=\"addsource\" type=\"text\" name=\"url\"></input>")
+	fmt.Fprintln(w, "<input id=\"addsource\" type=\"submit\"></input>")
+	// <input id="search" type="search"
+	// name="search" placeholder="Type to start searching"
+	// hx-get="http://localhost:8888/query"
+	// hx-trigger="keyup changed delay:5ms, search"
+	// hx-target="#results"
+	// hx-include="[class='source-checkbox']">
+
+	fmt.Fprintln(w, "<br>")
+	fmt.Fprintln(w, "<br>")
+	fmt.Fprintln(w, "<button hx-trigger=\"click\" hx-target=\"#modal\" hx-swap=\"outerHTML\" hx-get=\"http://localhost:8888/nothing\">Close</button>")
+	fmt.Fprintln(w, "</div>")
+	fmt.Fprintln(w, "</div>")
+	fmt.Fprintln(w, "</div>")
+}
 
 func main() {
 	loadSources()
@@ -433,6 +563,12 @@ func main() {
 	mux.HandleFunc("/query", reqQuery)
 	mux.HandleFunc("/addyoutube", reqAddYoutube)
 	mux.HandleFunc("/getsources", reqGetSources)
+	mux.HandleFunc("/getrawsources", reqGetRawSources)
+	mux.HandleFunc("/gettickets", reqGetTickets)
+	mux.HandleFunc("/sourcemodal", reqSourceModal)
+	mux.HandleFunc("/nothing", func(w http.ResponseWriter, req *http.Request) {
+		fmt.Println("")
+	})
 	mux.HandleFunc("/trolling", func(w http.ResponseWriter, req *http.Request) {
 		fmt.Println("trolled!")
 		fmt.Fprintln(w, "Yo wassup homie")

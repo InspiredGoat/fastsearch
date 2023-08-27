@@ -39,7 +39,7 @@
 //            }
 
             console.log(elem)
-            elem = elem.firstElementChild;
+            elem = elem.children[1];
             console.log(elem)
 
             if (elem.nodeName == "DIV") {
@@ -63,6 +63,16 @@
 
         function toggleSelfClass(event, className) {
             var elem = event.target;
+
+            if (elem.classList.contains(className)) {
+                elem.classList.remove(className);
+            } else {
+                elem.classList.add(className);
+            }
+        }
+
+        function toggleIdClass(id, className) {
+            var elem = document.getElementById(id);
 
             if (elem.classList.contains(className)) {
                 elem.classList.remove(className);
@@ -100,8 +110,9 @@
 
         <p><b>Sources:</b></p>
         <div id="sources" hx-trigger="load" hx-get="http://localhost:8888/getsources"></div>
-        <div id="addsource">Manage sources</div>
-        <div id="tickets" hx-trigger="every 1s" hx-get="http://localhost:8888/gettickets"></div>
+        <button hx-get="http://localhost:8888/sourcemodal" hx-target="body" hx-swap="beforeend">Manage sources</button>
+        <!-- <div id="tickets" hx-trigger="every 1s" hx-get="http://localhost:8888/gettickets"></div> -->
+
     </div>
 
     <div id="results"></div>
